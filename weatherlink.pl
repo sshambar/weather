@@ -2,53 +2,39 @@
 
 use strict;
 use warnings;
-use feature qw(switch say);
+use feature qw(say);
 
 use DBI;
 use Time::Local;
 use IO::Select;
 use IO::Handle;
+use Pod::Usage;
+use Getopt::Long qw(:config no_ignore_case bundling auto_help);
 
 my $def_config = "/etc/weather/import.conf";
 
-sub usage {
-    my $prog = $0;
-    $prog =~ s|.*/||;
-    say "WeatherLink Data Import";
-    say "Usage: $prog [-d] [-f <config>]";
-    say "Defaults:";
-    say "  <config> = $def_config";
-    exit 1;
-}
-
-my $opt = "";
-my $optarg;
 my $config = $def_config;
 my $debug = 0;
+my $test = 0;
+my $man = ''; ## man page at end of file
 
-foreach (@ARGV) {
-    given ($_) {
-	when (/^-(f)/) { $opt = $_; }
-	when (/^-(d)/) { $debug = 1; }
-	default {
-	    $optarg = $_;
-	    usage() if not $optarg;
-	    given ($opt) {
-		when (/f/) { $config = $optarg; }
-		default {
-		    say "Unknown option: $optarg";
-		    usage();
-		}
-	    }
-	    $opt="";
-	}
-    }
-}
+GetOptions ('config|f=s' => \$config,
+	    'debug|d+' => \$debug,
+	    'test|t+' => \$test,
+	    'man' => \$man)
+    or pod2usage();
+
+pod2usage(-verbose => 2) if $man;
 
 my %options;
 my @cparams = qw(username password db db.username db.password db.id);
+my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = gmtime;
+my @curtime = gmtime;
+my $CurrentYear = $curtime[5] + 1900;
 
-if ($debug) { say "Configfile is '$config'"; }
+if ($debug) { 
+    say "Configfile is '$config'"; 
+}
 
 open(CONFIG, $config) or die "Unable to read config $config: $!\n";
 while (<CONFIG>) {
@@ -168,7 +154,8 @@ exit(0);
 sub getDMPPage {
 	my ($c, $in);
 	while($c = $file->read($in,$packet_size)) {
-		&readBlock($in);
+	    &readBlock($in);
+	    return if $test;
 	}	
 }
     
@@ -207,7 +194,23 @@ sub readBlock {
 	$value{'highuv'} = unpack('C*', $packet[32]);
 	$value{'forecastrule'} = unpack('C*', $packet[33]);
 	$value{'rx'} = $value{'windsamples'} / $max_nof_sample_per_min * 100;
-	return if $StartYear > 2100;
+	# a few sanity checks
+	if ($value{'tempin'} > 1500) {
+	    say "Invalid tempin > 1500: $value{'tempin'}";
+	    return;
+	}
+	if ($value{'tempout'} > 1500) {
+	    say "Invalid tempout > 1500: $value{'tempout'}";
+	    return;
+	}
+	if ($value{'avgwindspeed'} > 100) {
+	    say "Invalid avgwindspeed > 100: $value{'avgwindspeed'}";
+	    return;
+	}
+	if ($StartYear > $CurrentYear) {
+	    say "Invalid StartYear > $CurrentYear: $StartYear";
+	    return;
+	}
 
 	$value{'winddir'} = $direction_value{$value{'prevailingwinddir'}};
 	$value{'winddir'} = '' if not $value{'winddir'};
@@ -215,6 +218,11 @@ sub readBlock {
 	$value{'hiwinddir'} = '' if not $value{'hiwinddir'};
 
 	$value{'date'} = "$StartYear-$StartMonth-$StartDay $value{'time'}";
+	if ($debug) {
+	    say "Values parsed: ";
+	    say vardump(\%value);
+	}
+	return if $test;
 	$dbh->do('insert into weather_samples (source_id, time_observed, barometer, temp_in, humid_in, temp_out, high_temp_out, low_temp_out, humid_out, wind_samples, wind_speed, wind_dir, high_wind_speed, high_wind_dir, rain, high_rain) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', undef,
 		 ($options{'db.id'}, $value{'date'},
 		  numfmt($value{'barometer'}/1000),
@@ -232,7 +240,7 @@ sub readBlock {
 }
 
 sub vardump {
-    foreach my $key (keys $_[0]) {
+    foreach my $key (keys %{ $_[0] }) {
 	print "$key = $_[0]->{$key}\n";
     }
 }
@@ -252,3 +260,29 @@ sub dodate {
 	elsif ($d =~ /(\d)/ ) {$date = "00:0${1}";}
 	return("$date");
 }
+
+
+__END__
+
+=head1 NAME
+
+weatherlink.pl - WeatherLink Data Import
+
+=head1 SYNOPSIS
+
+weatherlink.pl [options]
+
+ Options:
+    -?, --help    brief help message
+    --man         full documentation
+    -d, --debug   increase debug level
+    -t, --test    don't save to database
+    -f, --config  specify config file (default: "/etc/weather/import.conf")
+    
+=head1 DESCRIPTION
+
+This program will connect to the Davis web servers and download
+the latest weather data, parse it, and import it into the database
+specified in the config file.
+
+=cut
