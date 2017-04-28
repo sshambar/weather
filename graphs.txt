@@ -1,0 +1,3 @@
+outside temp, dewpoint, humidity
+wind, hiwind, wind-dir
+barometer, rain

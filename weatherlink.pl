@@ -1,0 +1,254 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+use feature qw(switch say);
+
+use DBI;
+use Time::Local;
+use IO::Select;
+use IO::Handle;
+
+my $def_config = "/etc/weather/import.conf";
+
+sub usage {
+    my $prog = $0;
+    $prog =~ s|.*/||;
+    say "WeatherLink Data Import";
+    say "Usage: $prog [-d] [-f <config>]";
+    say "Defaults:";
+    say "  <config> = $def_config";
+    exit 1;
+}
+
+my $opt = "";
+my $optarg;
+my $config = $def_config;
+my $debug = 0;
+
+foreach (@ARGV) {
+    given ($_) {
+	when (/^-(f)/) { $opt = $_; }
+	when (/^-(d)/) { $debug = 1; }
+	default {
+	    $optarg = $_;
+	    usage() if not $optarg;
+	    given ($opt) {
+		when (/f/) { $config = $optarg; }
+		default {
+		    say "Unknown option: $optarg";
+		    usage();
+		}
+	    }
+	    $opt="";
+	}
+    }
+}
+
+my %options;
+my @cparams = qw(username password db db.username db.password db.id);
+
+if ($debug) { say "Configfile is '$config'"; }
+
+open(CONFIG, $config) or die "Unable to read config $config: $!\n";
+while (<CONFIG>) {
+    next if /^\s*#/;
+    next if /^\s*$/;
+    if ($_ =~ /^\s*(\S+)\s*=\s*(\S+)\s*$/) {
+	my ($key, $val) = ($1, $2);
+	die "Unknown config key: '$key'\n" if not grep { $_ eq $key } @cparams;
+	if ($debug) { say "  $key = $val"; }
+	$options{$key} = $val;
+    } else {
+	die "Invalid config entry: $_\n";
+    }
+}
+close(CONFIG);
+foreach (@cparams) {
+    die "Config $config missing $_ entry\n" if not defined($options{$_});
+#    say "'$_'='$options{$_}'";
+}
+
+my %direction_value = (
+		        0 => "N",
+		        1 => "NNE",
+		        2 => "NE",
+		        3 => "ENE",
+		        4 => "E",
+		        5 => "ESE", 
+		        6 => "SE",
+		        7 => "SSE",
+		        8 => "S",
+		        9 => "SSW",
+		        10 => "SW",
+		        11 => "WSW",
+		        12 => "W",
+		        13 => "WNW",
+		        14 => "NW",
+		       15 => "NNW");
+
+
+my %dash_value = (
+		  'tempout' => 32767,
+		  'hightempout' => -32768,
+		  'lowtempout' => 32767,
+		  'rainclicks' => 0,
+		  'highrainrate' => 0,
+		  'barometer' => 0,
+		  'solarradiation' => 32767,
+		  'windsamples' => 0,
+		  'tempin' => 32767,
+		  'humin' => 255,
+		  'humout' => 255,
+		  'avgwindspeed' => 255,
+		  'highwindspeed' => 0,
+		  'highwindspeeddir' => 255,
+		  'prevailingwinddir' => 255,
+		  'uv' => 255,
+		  'et' => 0, 
+		  'highsolarradiation' => 32767,
+		  'highuv' => 255,
+		  'forecastrule' => 193);
+
+my %value;
+
+my $max_nof_sample_per_min = 23;
+my $packet_size = 52;
+my $rain_in_per_click = 0.01;
+my $et_in_per_click = 0.001;
+my $timestamp = 0;
+
+if ($debug) { say "Connection to mysql table $options{'db'}"; }
+
+my $dbh = DBI->connect("DBI:mysql:$options{'db'}", $options{'db.username'}, $options{'db.password'}, { PrintError => 0, AutoCommit => 1 })
+    or die $DBI::errstr;
+
+my $result = $dbh->selectrow_hashref('SELECT max(time_observed) start FROM weather_samples WHERE source_id=?', undef, $options{'db.id'})
+    or die $dbh->errstr;
+
+if (defined($result->{'start'})) {
+
+    if ($debug) { say "Newest sample timestamp: $result->{'start'}"; }
+
+    my ($year, $month, $day, $hour, $minute, $second) =
+	$result->{'start'} =~ /(\d\d\d\d)-(\d\d)-(\d\d) (\d\d):(\d\d):(\d\d)/;
+
+    $timestamp = $day + $month*32 + ($year - 2000)*512;
+    $timestamp = $timestamp * 65536;
+    $timestamp = $timestamp + (100 * $hour) + $minute;
+}
+
+if ($debug) { say "Getting URL: http://www.weatherlink.com/webdl.php?timestamp=$timestamp&user=$options{'username'}&pass=$options{'password'}&action=headers"; }
+
+my $nofRecords = 0;
+open (WL, "wget -O - \"http://www.weatherlink.com/webdl.php?timestamp=$timestamp&user=$options{'username'}&pass=$options{'password'}&action=headers\" 2> /dev/null |");
+while (<WL>) {
+    if (/^Records=(\d+)/) { $nofRecords = $1; }
+}
+close(WL);
+
+if ($debug) { say "New records: $nofRecords"; }
+
+if (! $nofRecords) { exit 0; }
+
+if ($debug) { say "Getting URL: http://www.weatherlink.com/webdl.php?timestamp=$timestamp&user=$options{'username'}&pass=$options{'password'}&action=data"; }
+
+open (WL, "wget -O - \"http://www.weatherlink.com/webdl.php?timestamp=$timestamp&user=$options{'username'}&pass=$options{'password'}&action=data\" 2> /dev/null |");
+	
+my $file = new IO::Handle;
+$file->fdopen(fileno(WL),"r");
+&getDMPPage();        
+$file->close;
+close(WL);
+
+$dbh->disconnect();
+
+exit(0);
+
+sub getDMPPage {
+	my ($c, $in);
+	while($c = $file->read($in,$packet_size)) {
+		&readBlock($in);
+	}	
+}
+    
+
+sub readBlock {
+   
+	my $in = shift @_; 
+	my @packet=split(//,$in);
+    
+	my $StartDatetmp = hex scalar reverse unpack('h*', join('',$packet[0],$packet[1]));
+	my $StartDay = $StartDatetmp & 0x1f;
+	$StartDatetmp = $StartDatetmp >> 5;
+	my $StartMonth = $StartDatetmp & 0x0f;
+	$StartDatetmp = $StartDatetmp >> 4;
+	my $StartYear = $StartDatetmp;
+	$StartYear = 2000 + $StartYear;
+	$value{'time'} = &dodate(unpack('S*', join('',$packet[2],$packet[3])));
+	$value{'tempout'} = unpack('S*', join('',$packet[4],$packet[5]));
+	$value{'hightempout'} = unpack('S*', join('',$packet[6],$packet[7]));
+	$value{'lowtempout'} = unpack('S*', join('',$packet[8],$packet[9]));
+	$value{'rainclicks'} = unpack('S*', join('',$packet[10],$packet[11]));
+	$value{'highrainrate'} = unpack('S*', join('',$packet[12],$packet[13]));
+	$value{'barometer'} = unpack('S*', join('',$packet[14],$packet[15]));
+	$value{'solarradiation'} = unpack('S*', join('',$packet[16],$packet[17]));
+	$value{'windsamples'} = unpack('S*', join('',$packet[18],$packet[19]));
+	$value{'tempin'} = unpack('S*', join('',$packet[20],$packet[21]));
+	$value{'humin'} = unpack('C*', $packet[22]);
+	$value{'humout'} = unpack('C*', $packet[23]);
+	$value{'avgwindspeed'} = unpack('C*', $packet[24]);
+	$value{'highwindspeed'} = unpack('C*', $packet[25]);
+	$value{'highwindspeeddir'} = unpack('C*', $packet[26]);
+	$value{'prevailingwinddir'} = unpack('C*', $packet[27]);
+	$value{'uv'} = unpack('C*', $packet[28]);
+	$value{'et'} = unpack('C*', $packet[29]);
+	$value{'highsolarradiation'} = unpack('S*', join('',$packet[30],$packet[31]));
+	$value{'highuv'} = unpack('C*', $packet[32]);
+	$value{'forecastrule'} = unpack('C*', $packet[33]);
+	$value{'rx'} = $value{'windsamples'} / $max_nof_sample_per_min * 100;
+	return if $StartYear > 2100;
+
+	$value{'winddir'} = $direction_value{$value{'prevailingwinddir'}};
+	$value{'winddir'} = '' if not $value{'winddir'};
+	$value{'hiwinddir'} = $direction_value{$value{'highwindspeeddir'}};
+	$value{'hiwinddir'} = '' if not $value{'hiwinddir'};
+
+	$value{'date'} = "$StartYear-$StartMonth-$StartDay $value{'time'}";
+	$dbh->do('insert into weather_samples (source_id, time_observed, barometer, temp_in, humid_in, temp_out, high_temp_out, low_temp_out, humid_out, wind_samples, wind_speed, wind_dir, high_wind_speed, high_wind_dir, rain, high_rain) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', undef,
+		 ($options{'db.id'}, $value{'date'},
+		  numfmt($value{'barometer'}/1000),
+		  numfmt($value{'tempin'}/10), numfmt($value{'humin'}),
+		  numfmt($value{'tempout'}/10),
+		  numfmt($value{'hightempout'}/10),
+		  numfmt($value{'lowtempout'}/10), numfmt($value{'humout'}),
+		  $value{'windsamples'}, numfmt($value{'avgwindspeed'}),
+		  $value{'winddir'},
+		  numfmt($value{'highwindspeed'}),
+		  $value{'hiwinddir'},
+		  numfmt($value{'rainclicks'} * $rain_in_per_click),
+		  numfmt($value{'highrainrate'} * $rain_in_per_click)))
+	    or (say vardump(\%value) and die $dbh->errstr);
+}
+
+sub vardump {
+    foreach my $key (keys $_[0]) {
+	print "$key = $_[0]->{$key}\n";
+    }
+}
+
+sub numfmt {
+    return sprintf("%.2f", $_[0]);
+}
+
+sub dodate {
+	my $d = shift @_;
+	my $date;
+
+	if( $d =~ /\d\d\d\d\d/ ){ $date = "\x00" }
+	elsif( $d =~ /(\d\d)(\d\d)/ ){ $date = "${1}:${2}"; }
+	elsif( $d =~ /(\d)(\d\d)/ ){ $date = "0${1}:${2}"; }
+	elsif ($d =~ /(\d\d)/ ) {$date = "00:${1}";}
+	elsif ($d =~ /(\d)/ ) {$date = "00:0${1}";}
+	return("$date");
+}
