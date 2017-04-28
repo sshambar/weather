@@ -1,0 +1,192 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>Mission Vineyard Weather</title>
+
+		<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
+		<script type="text/javascript">
+$(function() {
+	// Create the chart
+	Highcharts.setOptions({
+		global : {
+			useUTC:  false
+		}
+	});
+	window.load_chart = new Highcharts.StockChart({
+		chart: {
+			renderTo: 'loading',
+			type: 'line',
+			zoomType: 'x'
+		},
+		loading: {
+			labelStyle: {
+				fontSize : "30px"
+			}
+		},
+		rangeSelector: {
+			enabled: false
+		},
+		series: [{
+			data: null
+		}],
+	});
+	window.load_chart.showLoading();
+	$.getJSON('/weather_source/napa?col=temp_out,humid_out,wind_speed,high_wind_speed,rain')
+	.done(function(data) {
+		
+		window.load_chart.hideLoading();
+		$("#loading").css("display","none");
+		$("#temp").css("display","block");
+		$("#wind").css("display","block");
+		$("#rain").css("display","block");
+		// extract table data for charts
+		var temp_data = [], humid_data = [], wind_data = [],
+		hiwind_data = [], hiwind_dir = [], rain_data = [],
+		dataLength = data.length;
+		for (i = 0; i < dataLength; i++) {
+			curdate = data[i][0];
+			temp_data.push([curdate, data[i][1]]);
+			humid_data.push([curdate, data[i][2]]);
+			wind_data.push([curdate, data[i][3]]);
+			hiwind_data.push([curdate, data[i][4]]);
+			if(i != 0) {
+				rain_data.push([curdate, data[i][5]]);
+			}
+		}
+		var end_date = temp_data[temp_data.length-1][0];
+		var start_date = end_date - 7*24*3600*1000;
+
+		var rangeSel = {
+			buttons: [{
+				type: 'day',
+				count: 1,
+				text: '1d'
+			}, {
+				type: 'week',
+				count: 1,
+				text: '1w'
+			}, {
+				type: 'month',
+				count: 1,
+				text: '1m'
+			}, {
+				type: 'month',
+				count: 6,
+				text: '6m'
+			}, {
+				type: 'all',
+				text: 'All'
+			}],
+			selected : 1
+		};
+		var plotOpt = {
+			shadow : true,
+			tooltip : {
+				valueDecimals : 2
+			},
+			pointStart : 1305948600000
+		};
+		window.temp_chart = new Highcharts.StockChart({
+			chart: {
+				renderTo: 'temp',
+				zoomType: 'x'
+			},
+			rangeSelector: rangeSel,
+			plotOptions: {
+				line: plotOpt
+			},
+			legend : {
+				enabled: true,
+				y: -130,
+				verticalAlign: "middle"
+			},
+			yAxis: [{
+				title: {
+					text: 'F/%'
+				},
+				height: 200,
+				lineWidth: 2
+			}],
+			series: [{
+				name: 'Temperature',
+				data: temp_data
+			}, {
+				name: 'Humidity',
+				data: humid_data
+			}]
+		});
+		window.wind_chart = new Highcharts.StockChart({
+			chart: {
+				renderTo: 'wind',
+				zoomType: 'x'
+			},
+			
+			rangeSelector: rangeSel,
+			plotOptions: {
+				line: plotOpt,
+				areaspline: plotOpt
+			},
+			legend: {
+				enabled: true,
+				y: -130,
+				verticalAlign: "middle"
+			},
+			yAxis: [{
+				title: {
+					text: 'mph'
+				},
+				lineWidth: 2
+			}],
+			series: [{
+				name: 'High Wind Speed',
+				data: hiwind_data,
+				type: 'areaspline'
+			}, {
+				name: 'Avg Wind Speed',
+				data: wind_data
+			}]
+		});
+		window.wind_chart = new Highcharts.StockChart({
+			chart: {
+				renderTo: 'rain',
+				zoomType: 'x'
+			},
+			
+			rangeSelector: rangeSel,
+			plotOptions: {
+				line: plotOpt
+			},
+			legend: {
+				enabled: true,
+				y: -130,
+				verticalAlign: "middle"
+			},
+			yAxis: [{
+				title: {
+					text: 'in'
+				},
+				lineWidth: 2
+			}],
+			series: [{
+				name: 'Rainfall',
+				data: rain_data,
+			}]
+		});
+	})
+        .fail(function(jqxhr, textStatus, error) {
+	  window.load_chart.hideLoading();
+	  document.getElementById("loading").innerHTML = "Request Failed: " + error;
+	});
+});
+		</script>
+	</head>
+	<body>
+	<script src="highstock.js"></script>
+	<h1 align="middle" style="color:#3E576F">Mission Vineyard Weather</h1>
+	<div id="loading" style="height:600px; min-width:500px"></div>
+	<div id="temp" style="display:none; height:300px; min-width:500px"></div>
+	<div id="wind" style="display:none; height:300px; min-width:500px"></div>
+	<div id="rain" style="display:none; height:300px; min-width:500px"></div>
+	</body>
+</html>
