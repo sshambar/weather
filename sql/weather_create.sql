@@ -9,7 +9,9 @@ CREATE TABLE weather_ranges (
        min_query_secs INTEGER NOT NULL
 );
 
-# Query < 2 months = 30 min samples; < 5 years = daily; otherwize weekly
+# Query < 2 months = 30 min samples (1-2880 rows)
+#  < 5 years = daily (60-1825 rows)
+# otherwize weekly (60- rows)
 INSERT INTO weather_ranges (range_mins, min_query_secs)
 VALUES (30, 0), (1440, 5184000), (10080, 157680000), (43200, 788400000);
 COMMIT;
