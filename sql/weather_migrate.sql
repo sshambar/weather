@@ -1,9 +1,9 @@
 
 ## For Migration...
-TRUNCATE TABLE weather_samples_new;
+TRUNCATE TABLE weather_samples;
 TRUNCATE TABLE weather_summary;
 
-INSERT INTO weather_samples_new
+INSERT INTO weather_samples
        (source_id, time_observed, time_utc, barometer, temp_in, humid_in,
         temp_out, high_temp_out, low_temp_out, humid_out, wind_samples,
         wind_speed, wind_dir, high_wind_speed, high_wind_dir, rain, high_rain)
@@ -12,7 +12,7 @@ SELECT	1 source_id, time_observed,
 	barometer, temp_in, humid_in, temp_out, high_temp_out,
 	low_temp_out, humid_out, wind_samples, wind_speed, w.id wind_dir,
 	high_wind_speed, hw.id high_wind_dir, rain, high_rain
-FROM weather_samples s, weather_windmap w, weather_windmap hw
+FROM weather_samples_orig s, weather_windmap w, weather_windmap hw
 WHERE w.direction = s.wind_dir
 AND hw.direction = s.high_wind_dir;
 

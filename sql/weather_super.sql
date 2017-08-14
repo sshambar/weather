@@ -93,7 +93,7 @@ BEGIN
 	 sum(wind_speed)/count(*), sum(wind_dir)/count(*),
 	 max(high_wind_speed), sum(high_wind_dir)/count(*),
 	 sum(rain), max(high_rain), count(*)
-  FROM weather_samples_new
+  FROM weather_samples
   WHERE source_id = sid
   AND time_utc >= min_date
   AND time_utc < max_date
@@ -134,7 +134,7 @@ END //
 DROP TRIGGER IF EXISTS weather_insert_trigger //
 CREATE DEFINER = weather@localhost
 TRIGGER weather_insert_trigger
-AFTER INSERT ON weather_samples_new FOR EACH ROW
+AFTER INSERT ON weather_samples FOR EACH ROW
 BEGIN
   CALL weather_update_summaries(NEW.source_id, NEW.time_utc);
 END //
@@ -142,7 +142,7 @@ END //
 DROP TRIGGER IF EXISTS weather_update_trigger //
 CREATE DEFINER = weather@localhost
 TRIGGER weather_update_trigger
-AFTER UPDATE ON weather_samples_new FOR EACH ROW
+AFTER UPDATE ON weather_samples FOR EACH ROW
 BEGIN
   IF OLD.source_id != NEW.source_id OR
      OLD.time_utc != NEW.time_utc THEN
@@ -154,7 +154,7 @@ END //
 DROP TRIGGER IF EXISTS weather_delete_trigger //
 CREATE DEFINER = weather@localhost
 TRIGGER weather_delete_trigger
-AFTER DELETE ON weather_samples_new FOR EACH ROW
+AFTER DELETE ON weather_samples FOR EACH ROW
 BEGIN
   CALL weather_update_summaries(OLD.source_id, OLD.time_utc);
 END //
@@ -169,7 +169,7 @@ BEGIN
 
   DECLARE time_cur CURSOR FOR
   	  SELECT time_utc
-  	  FROM weather_samples_new
+  	  FROM weather_samples
 	  WHERE source_id = sid
 	  ORDER by time_utc;
   DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;

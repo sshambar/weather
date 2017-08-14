@@ -1,0 +1,3 @@
+
+## Save orig weather data...
+RENAME TABLE weather_samples TO weather_samples_orig;

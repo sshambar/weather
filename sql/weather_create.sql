@@ -1,11 +1,9 @@
 
-DROP TABLE weather_sources;
 CREATE TABLE weather_sources (
        id INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY,
        name VARCHAR(32) NOT NULL
 );
 
-DROP TABLE weather_ranges;
 CREATE TABLE weather_ranges (
        range_mins INTEGER NOT NULL PRIMARY KEY,
        min_query_secs INTEGER NOT NULL
@@ -27,8 +25,7 @@ VALUES (0, "N"), (1, "NNE"), (2, "NE"), (3, "ENE"), (4, "E"), (5, "ESE"),
        (12, "W"), (13, "WNW"), (14, "NW"), (15, "NNW"), (16, "");
 COMMIT;
 
-# DROP TABLE weather_samples_new;
-CREATE TABLE weather_samples_new (
+CREATE TABLE weather_samples (
        source_id INTEGER NOT NULL,
        CONSTRAINT FOREIGN KEY weather_samples_source_fk (source_id)
          REFERENCES weather_sources (id)
@@ -58,7 +55,6 @@ CREATE TABLE weather_samples_new (
        CONSTRAINT PRIMARY KEY (source_id, time_utc)
 );
 
-DROP TABLE weather_summary;
 CREATE TABLE weather_summary (
        source_id INTEGER NOT NULL,
        CONSTRAINT FOREIGN KEY weather_summary_source_fk (source_id)
@@ -93,7 +89,6 @@ CREATE TABLE weather_summary (
        CONSTRAINT PRIMARY KEY (source_id, range_mins, time_utc)
 );
 
-DROP TABLE weather_log;
 CREATE TABLE weather_log (
        id INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY,
        dt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
