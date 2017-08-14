@@ -1,190 +1,282 @@
 <!DOCTYPE HTML>
 <html>
-	<head>
-		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-		<title>Mission Vineyard Weather</title>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>Mission Vineyard Weather</title>
+	
+<script src="https://code.jquery.com/jquery-3.1.1.min.js"></script>
+<script src="highstock-5.js"></script>
+<script type="text/javascript">
+ 
+ function queryURL(e) {
+	 var url = '/weather/data?cols=temp_out,humid_out,high_wind_speed,wind_speed,rain&source=napa&callback=?';
+	 if(e) {
+		 url += '&start=' + Math.round(e.min) + '&end=' + Math.round(e.max);
+	 }
+	 return url;
+ }
 
-		<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js"></script>
-		<script type="text/javascript">
-$(function() {
-	// Create the chart
-	Highcharts.setOptions({
-		global : {
-			useUTC:  false
-		}
-	});
-	window.load_chart = new Highcharts.stockChart({
-		chart: {
-			renderTo: 'loading',
-			type: 'line',
-			zoomType: 'x'
-		},
-		loading: {
-			labelStyle: {
-				fontSize : "30px"
-			}
-		},
-		rangeSelector: {
-			enabled: false
-		},
-		series: [{
-			data: null
-		}],
-	});
-	window.load_chart.showLoading();
-	$.getJSON('/weather_source/napa?col=temp_out,humid_out,wind_speed,high_wind_speed,rain')
-	.done(function(data) {
-		window.load_chart.hideLoading();
-		$("#loading").css("display","none");
-		$("#temp").css("display","block");
-		$("#wind").css("display","block");
-		$("#rain").css("display","block");
-		// extract table data for charts
-		var temp_data = [], humid_data = [], wind_data = [],
-		hiwind_data = [], hiwind_dir = [], rain_data = [],
-		dataLength = data.length;
-		for (i = 0; i < dataLength; i++) {
-			curdate = data[i][0];
-			temp_data.push([curdate, data[i][1]]);
-			humid_data.push([curdate, data[i][2]]);
-			wind_data.push([curdate, data[i][3]]);
-			hiwind_data.push([curdate, data[i][4]]);
-			if(i != 0) {
-				rain_data.push([curdate, data[i][5]]);
-			}
-		}
-		var end_date = temp_data[temp_data.length-1][0];
-		var start_date = end_date - 7*24*3600*1000;
+ function showError(msg) {
+ 	 var loading = document.getElementById("loading");
+	 loading.innerHTML = "Request Failed: " + msg;
+	 $("#container").css('display', 'none');
+	 loading.style.display = 'block';
+ }
+ function hideError() {
+	 $("#loading").css('display', 'none');
+	 $("#container").css('display', 'block');
+ }
+ 
+ function parseData(data) {
+	 var meta = { temp: [], humid: [], wind: [], hwind: [], rain: [],
+		      dayrain: [], error: null },
+	     curdate, dayrain = 0, daystart = 0;
+	 if (typeof(data) != "object") {
+		 return meta;
+	 }
+	 if (data.error) {
+		 meta.error = data.error;
+		 return meta;
+	 }
+	 for (i = 0; i < data.length; i++) {
+		 curdate = data[i][0];
+		 meta['temp'].push([curdate, data[i][1]]);
+		 meta['humid'].push([curdate, data[i][2]]);
+		 meta['hwind'].push([curdate, data[i][3]]);
+		 meta['wind'].push([curdate, data[i][4]]);
+		 meta['rain'].push([curdate, data[i][5]]);
+		 dayrain += data[i][5];
+		 if (curdate > (data[daystart][0] + 86400000)) {
+			 dayrain -= data[daystart][5];
+			 while(++daystart < i) {
+				 if (curdate <= (data[daystart][0] + 86400000)) {
+					 break;
+				 }
+			 }
+		 }
+		 meta['dayrain'].push([curdate, dayrain]);
+	 }
 
-		var rangeSel = {
-			buttons: [{
-				type: 'day',
-				count: 1,
-				text: '1d'
-			}, {
-				type: 'week',
-				count: 1,
-				text: '1w'
-			}, {
-				type: 'month',
-				count: 1,
-				text: '1m'
-			}, {
-				type: 'month',
-				count: 6,
-				text: '6m'
-			}, {
-				type: 'all',
-				text: 'All'
-			}],
-			selected : 1
-		};
-		var plotOpt = {
-			shadow : true,
-			tooltip : {
-				valueDecimals : 2
-			},
-			pointStart : 1305948600000
-		};
-		window.temp_chart = new Highcharts.StockChart({
-			chart: {
-				renderTo: 'temp',
-				zoomType: 'x'
-			},
-			rangeSelector: rangeSel,
-			plotOptions: {
-				line: plotOpt
-			},
-			legend : {
-				enabled: true,
-				y: -130,
-				verticalAlign: "middle"
-			},
-			yAxis: [{
-				title: {
-					text: 'F/%'
-				},
-				height: 200,
-				lineWidth: 2
-			}],
-			series: [{
-				name: 'Temperature',
-				data: temp_data
-			}, {
-				name: 'Humidity',
-				data: humid_data
-			}]
-		});
-		window.wind_chart = new Highcharts.StockChart({
-			chart: {
-				renderTo: 'wind',
-				zoomType: 'x'
-			},
-			rangeSelector: rangeSel,
-			plotOptions: {
-				line: plotOpt,
-				areaspline: plotOpt
-			},
-			legend: {
-				enabled: true,
-				y: -130,
-				verticalAlign: "middle"
-			},
-			yAxis: [{
-				title: {
-					text: 'mph'
-				},
-				lineWidth: 2
-			}],
-			series: [{
-				name: 'High Wind Speed',
-				data: hiwind_data,
-				type: 'areaspline'
-			}, {
-				name: 'Avg Wind Speed',
-				data: wind_data
-			}]
-		});
-		window.wind_chart = new Highcharts.StockChart({
-			chart: {
-				renderTo: 'rain',
-				zoomType: 'x'
-			},
-			rangeSelector: rangeSel,
-			plotOptions: {
-				line: plotOpt
-			},
-			legend: {
-				enabled: true,
-				y: -130,
-				verticalAlign: "middle"
-			},
-			yAxis: [{
-				title: {
-					text: 'in'
-				},
-				lineWidth: 2
-			}],
-			series: [{
-				name: 'Rainfall',
-				data: rain_data,
-			}]
-		});
-	})
-        .fail(function(jqxhr, textStatus, error) {
-	  window.load_chart.hideLoading();
-	  document.getElementById("loading").innerHTML = "Request Failed: " + error;
-	});
-});
-		</script>
-	</head>
-	<body>
-	<script src="highstock-5.js"></script>
-	<script src="modules-5/exporting.js"></script>
-	<h1 align="middle" style="color:#3E576F">Mission Vineyard Weather</h1>
-	<div id="loading" style="height:600px; min-width:500px"></div>
-	<div id="temp" style="display:none; height:400px; min-width:310px"></div>
-	<div id="wind" style="display:none; height:400px; min-width:310px"></div>
-	<div id="rain" style="display:none; height:400px; min-width:310px"></div>
-	</body>
+	 return meta;
+ }
+
+ function afterSetExtremes(e) {
+	 var chart = Highcharts.charts[0];
+	 chart.showLoading('Loading data from server...');
+
+	 $.getJSON(queryURL(e), function (data) {
+		 var meta = parseData(data);
+		 chart.hideLoading();
+		 if (meta.error) {
+			 showError(meta.error.msg);
+		 }
+		 else {
+			 hideError();
+			 chart.series[0].setData(meta['temp'], false);
+			 chart.series[1].setData(meta['humid'], false);
+			 chart.series[2].setData(meta['hwind'], false);
+			 chart.series[3].setData(meta['wind'], false);
+			 chart.series[4].setData(meta['dayrain'], false);
+			 chart.series[5].setData(meta['rain'], false);
+		 }
+	 })
+	  .fail(function(jqxhr, textStatus, error) {
+		  chart.hideLoading();
+		  showError(error);
+	  });
+ }
+
+ function setupChart(meta) {
+ 	 // Create the chart
+	 Highcharts.setOptions({
+		 global : {
+			 useUTC:  false
+		 }
+	 });
+	 Highcharts.stockChart('container', {
+		 chart: {
+			 type: 'spline',
+			 zoomType: 'x'
+		 },
+		 plotOptions: {
+			 series: {
+				 getExtremesFromAll: true,
+				 showInNavigator: true,
+				 lineWidth: 1.5
+			 }
+		 },
+		 navigator: {
+			 adaptToUpdatedData: false
+		 },
+		 rangeSelector: {
+			 buttons: [{
+				 type: 'hour',
+				 count: 31,
+				 text: 'Day'
+			 }, {
+				 type: 'month',
+				 count: 1,
+				 text: 'Month'
+			 }, {
+				 type: 'year',
+				 count: 1,
+				 text: 'Year'
+			 }, {
+				 type: 'all',
+				 text: 'All'
+			 }],
+			 buttonTheme: {
+				 width: 50
+			 },
+			 inputEnabled: false, // it supports only days
+			 selected: 3 // all
+		 },
+		 legend : {
+			 enabled: true,
+			 x: -70,
+			 align: 'right',
+			 verticalAlign: 'top',
+			 floating: true
+		 },
+		 xAxis: {
+			 events: { afterSetExtremes: afterSetExtremes },
+			 minRange: 30 * 3600 * 1000 // one day
+		 },
+		 yAxis: [{
+			 labels: {
+				 align: 'right',
+				 x: -3
+			 },
+			 title: {
+				 text: 'F/%'
+			 },
+			 height: '40%',
+			 max: 100,
+			 min: 0,
+			 startOnTick: false,
+			 lineWidth: 2
+		 }, {
+			 labels: {
+				 align: 'right',
+				 x: -3
+			 },
+			 title: {
+				 text: 'mph'
+			 },
+			 top: '43%',
+			 height: '25%',
+			 max: 30,
+			 min: 0,
+			 offset: 0,
+			 lineWidth: 2
+		 }, {
+			 labels: {
+				 align: 'right',
+				 x: -3
+			 },
+			 title: {
+				 text: 'in'
+			 },
+			 top: '70%',
+			 height: '30%',
+			 max: 10,
+			 min: 0,
+			 offset: 0,
+			 lineWidth: 2
+		 }],
+		 series: [{
+			 data: meta['temp'],
+			 name: 'Temperature',
+			 tooltip: {
+				 valueDecimals: 2,
+				 valueSuffix: 'F'
+			 },
+			 colorIndex: 5
+		 }, {
+			 data: meta['humid'],
+			 name: 'Humidity',
+			 tooltip: {
+				 valueDecimals: 2,
+			 	 valueSuffix: '%'
+			 },
+			 colorIndex: 6
+		 }, {
+ 			 data: meta['hwind'],
+			 name: 'High Wind',
+			 type: 'areaspline',
+			 yAxis: 1,
+			 tooltip: {
+				 valueDecimals: 2,
+			 	 valueSuffix: ' mph'
+			 },
+			 colorIndex: 2,
+			 fillColor: {
+				 linearGradient: { x1: 0, y1: 0, x2: 0, y2: 1 },
+				 stops: [
+					 [0, Highcharts.getOptions().colors[2]],
+					 [1, Highcharts.Color(Highcharts.getOptions().colors[2]).setOpacity(0).get('rgba')]
+				 ]
+			 }
+		 }, {
+ 			 data: meta['wind'],
+			 name: 'Avg Wind',
+			 yAxis: 1,
+			 tooltip: {
+				 valueDecimals: 2,
+			 	 valueSuffix: ' mph'
+			 },
+			 colorIndex: 3
+		 }, {
+			 data: meta['dayrain'],
+			 name: 'Daily Rain',
+			 type: 'areaspline',
+			 yAxis: 2,
+			 tooltip: {
+				 valueDecimals: 2,
+			 	 valueSuffix: ' in'
+			 },
+			 colorIndex: 0,
+			 fillColor: {
+				 linearGradient: { x1: 0, y1: 0, x2: 0, y2: 1 },
+				 stops: [
+					 [0, Highcharts.getOptions().colors[0]],
+					 [1, Highcharts.Color(Highcharts.getOptions().colors[0]).setOpacity(0).get('rgba')]
+				 ]
+			 }
+		 }, {
+			 data: meta['rain'],
+			 name: 'Rain',
+			 yAxis: 2,
+			 tooltip: {
+				 valueDecimals: 2,
+			 	 valueSuffix: ' in'
+			 },
+			 colorIndex: 4
+		 }]
+	 });
+ }
+
+ $(function() {
+	 $.getJSON(queryURL(), function (data) {
+		 var meta = parseData(data);
+		 if (meta.error) {
+			 showError(meta.error.msg);
+		 }
+		 else {
+			 hideError();
+			 setupChart(meta);
+		 }
+	 })
+	  .fail(function(jqxhr, textStatus, error) {
+		  showError(error);
+	  });
+ });
+ 
+</script>
+</head>
+<body>
+    <h1 align="middle" style="color:#3E576F">Mission Vineyard Weather</h1>
+    <div id="loading" align="middle" style="color:#3E576F; height:500px; min-width:310px">Loading...</div>
+    <div id="container" style="display:none; height: 500px; min-width: 310px"></div>
+</body>
 </html>
