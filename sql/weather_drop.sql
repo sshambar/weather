@@ -1,4 +1,6 @@
 
+warnings;
+
 ## Clean slate...
 DROP TABLE weather_log;
 DROP TABLE weather_summary;

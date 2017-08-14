@@ -11,6 +11,14 @@ use IO::Handle;
 use Pod::Usage;
 use Getopt::Long qw(:config no_ignore_case bundling auto_help);
 
+# import.conf entries:
+#  db = <dbname>
+#  db.username = <db user>
+#  db.password = <db password>
+#  db.source = <source name, see weather_sources>
+#  username = <weatherlink username>
+#  password  = <weatherlink password>
+
 my $def_config = "/etc/weather/import.conf";
 
 my $config = $def_config;
@@ -27,7 +35,7 @@ GetOptions ('config|f=s' => \$config,
 pod2usage(-verbose => 2) if $man;
 
 my %options;
-my @cparams = qw(username password db db.username db.password db.id);
+my @cparams = qw(username password db db.username db.password db.source);
 my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = gmtime;
 my @curtime = gmtime;
 my $CurrentYear = $curtime[5] + 1900;
@@ -74,28 +82,6 @@ my %direction_value = (
 		       15 => "NNW");
 
 
-my %dash_value = (
-		  'tempout' => 32767,
-		  'hightempout' => -32768,
-		  'lowtempout' => 32767,
-		  'rainclicks' => 0,
-		  'highrainrate' => 0,
-		  'barometer' => 0,
-		  'solarradiation' => 32767,
-		  'windsamples' => 0,
-		  'tempin' => 32767,
-		  'humin' => 255,
-		  'humout' => 255,
-		  'avgwindspeed' => 255,
-		  'highwindspeed' => 0,
-		  'highwindspeeddir' => 255,
-		  'prevailingwinddir' => 255,
-		  'uv' => 255,
-		  'et' => 0, 
-		  'highsolarradiation' => 32767,
-		  'highuv' => 255,
-		  'forecastrule' => 193);
-
 my %value;
 
 my $max_nof_sample_per_min = 23;
@@ -109,7 +95,11 @@ if ($debug) { say "Connection to mysql table $options{'db'}"; }
 my $dbh = DBI->connect("DBI:mysql:$options{'db'}", $options{'db.username'}, $options{'db.password'}, { PrintError => 0, AutoCommit => 1 })
     or die $DBI::errstr;
 
-my $result = $dbh->selectrow_hashref('SELECT max(time_observed) start FROM weather_samples WHERE source_id=?', undef, $options{'db.id'})
+my $result = $dbh->selectrow_hashref('SELECT max(s.time_observed) start
+				     FROM weather_samples s, weather_sources r
+				     WHERE s.source_id = r.id
+				     AND r.name = ?', undef, 
+				     $options{'db.source'})
     or die $dbh->errstr;
 
 if (defined($result->{'start'})) {
@@ -223,19 +213,29 @@ sub readBlock {
 	    say vardump(\%value);
 	}
 	return if $test;
-	$dbh->do('insert into weather_samples (source_id, time_observed, barometer, temp_in, humid_in, temp_out, high_temp_out, low_temp_out, humid_out, wind_samples, wind_speed, wind_dir, high_wind_speed, high_wind_dir, rain, high_rain) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', undef,
-		 ($options{'db.id'}, $value{'date'},
+	$dbh->do('INSERT INTO weather_samples (source_id, time_observed,
+		    time_utc, barometer, temp_in, humid_in, temp_out,
+		    high_temp_out, low_temp_out, humid_out, wind_samples,
+		    wind_speed, wind_dir, high_wind_speed, high_wind_dir,
+		    rain, high_rain)
+		  SELECT r.id, ?, convert_tz(?, "US/Pacific", "UTC"),
+		    ?, ?, ?, ?, ?, ?, ?, ?, ?, w.id, ?, hw.id, ?, ?
+		  FROM weather_sources r, weather_windmap w, 
+		    weather_windmap hw
+		  WHERE r.name = ? AND w.direction = ? AND hw.direction = ?',
+		 undef,
+		 ($value{'date'}, $value{'date'},
 		  numfmt($value{'barometer'}/1000),
 		  numfmt($value{'tempin'}/10), numfmt($value{'humin'}),
 		  numfmt($value{'tempout'}/10),
 		  numfmt($value{'hightempout'}/10),
 		  numfmt($value{'lowtempout'}/10), numfmt($value{'humout'}),
 		  $value{'windsamples'}, numfmt($value{'avgwindspeed'}),
-		  $value{'winddir'},
 		  numfmt($value{'highwindspeed'}),
-		  $value{'hiwinddir'},
 		  numfmt($value{'rainclicks'} * $rain_in_per_click),
-		  numfmt($value{'highrainrate'} * $rain_in_per_click)))
+		  numfmt($value{'highrainrate'} * $rain_in_per_click),
+		  $options{'db.source'}, $value{'winddir'},
+		  $value{'hiwinddir'}))
 	    or (say vardump(\%value) and die $dbh->errstr);
 }
 

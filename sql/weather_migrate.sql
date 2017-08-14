@@ -1,7 +1,15 @@
 
+## Probably want to drop trigger weather_insert_trigger for speed...
+
 ## For Migration...
 TRUNCATE TABLE weather_samples;
 TRUNCATE TABLE weather_summary;
+
+DELETE FROM weather_sources
+WHERE id = 1;
+
+INSERT INTO weather_sources (id, name)
+VALUES (1, 'napa');
 
 INSERT INTO weather_samples
        (source_id, time_observed, time_utc, barometer, temp_in, humid_in,
@@ -24,3 +32,4 @@ AND hw.direction = s.high_wind_dir;
 
 #AND s.time_observed like '2017-06-05%';
 
+## Now re-add trigger weather_insert_trigger, and call weather_recalc_all;
