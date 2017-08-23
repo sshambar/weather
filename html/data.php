@@ -2,7 +2,7 @@
 /**
  * This file loads content from four different data tables
  * depending on the required time range.
- * 
+ *
  * @param callback {String} The name of the JSONP callback to pad the JSON within
  * @param source {String} Which sample set to query
  * @param start {Integer} The starting point in JS time
@@ -13,6 +13,7 @@
 //ini_set('display_errors', 1);
 
 $callback = null;
+$add_extra = 0;
 
 function jsonp_header() {
 	global $callback;
@@ -53,12 +54,10 @@ $(document).ajaxSuccess(function(evt, request, settings){
         {
             showDialog(resp.msg);
             return;
-        }                   
-    }    
+        }
+    }
 });
 */
-
-$now = time();
 
 // get the parameters
 
@@ -92,7 +91,7 @@ if ($end) {
 	$end /= 1000;
 }
 else {
-	$end = $now;
+	$end = 0;
 }
 
 $cols = @$_GET['cols'];
@@ -111,7 +110,7 @@ $valid_cols = [ 'barometer', 'temp_in', 'humid_in', 'temp_out',
 		'high_wind_speed', 'high_wind_dir', 'rain',
 		'high_rain' ];
 $test_cols = explode(',', $cols);
-foreach ($test_cols as $col) {		
+foreach ($test_cols as $col) {
 	if(! in_array($col, $valid_cols)) {
 		weather_error(5, "Invalid column: '$col'");
 	}
@@ -127,6 +126,7 @@ $options = [
 
 $pdo = new PDO("mysql:host=localhost;dbname=$db_name;charset=utf8",
 	       $db_user, $db_pass, $options);
+$pdo->exec("SET time_zone='UTC';");
 
 if ($start == 0) {
 	$sql = "SELECT UNIX_TIMESTAMP(MIN(w.time_utc)) start
@@ -139,6 +139,21 @@ if ($start == 0) {
 	$start = $result['start'];
 
 	if (! $start) {
+		weather_error(10, "Unknown source '$source'");
+	}
+}
+
+if ($end == 0) {
+	$sql = "SELECT UNIX_TIMESTAMP(MAX(w.time_utc)) end
+		FROM weather_samples w, weather_sources s
+		WHERE s.name = :source
+		AND w.source_id = s.id";
+	$query = $pdo->prepare($sql);
+	$query->execute(['source' => $source]);
+	$result = $query->fetch();
+	$end = $result['end'];
+
+	if (! $end) {
 		weather_error(10, "Unknown source '$source'");
 	}
 }
@@ -177,20 +192,33 @@ if ($range_mins > 30) {
 	$table = "weather_summary";
 	$match = "AND range_mins = :range_mins";
 	$query_args['range_mins'] = $range_mins;
+
+	$sql = "SELECT UNIX_TIMESTAMP(MAX(time_utc)) last
+		FROM weather_summary
+		WHERE source_id = :source_id
+		AND range_mins = :range_mins";
+	$query = $pdo->prepare($sql);
+	$query->execute(['source_id' => $source_id,
+			 'range_mins' => $range_mins]);
+	$result = $query->fetch();
+	$last = $result['last'];
+
+	if ($end > $last) {
+		$add_extra = $end * 1000;
+	}
 }
 else {
 	$table = "weather_samples";
 	$match = "";
 }
 
-$sql = "SELECT unix_timestamp(time_utc) * 1000 dt,
+$sql = "SELECT UNIX_TIMESTAMP(time_utc) * 1000 dt,
 		$cols
 	FROM $table
 	WHERE time_utc BETWEEN :start_time AND :end_time
         AND source_id = :source_id $match
 	ORDER BY time_utc
-	LIMIT 0, 5000
-";
+	LIMIT 0, 5000";
 
 $query = $pdo->prepare($sql);
 $query->execute($query_args);
@@ -206,11 +234,16 @@ $pdo = null;
 // print it
 jsonp_header();
 echo "/* start: $start_time end: $end_time sid: $source_id range_secs: $range_secs range: $range_mins */\n";
-echo "/* cols: ts,$cols */\n";
+echo "/* cols: ts,$cols end: $end last: $last */\n";
 jsonp_pre();
 echo "[\n";
 foreach ($rows as $row) {
-    echo "[" . join(",", $row) ."],\n";
+    echo "[" . join(",", $row) . "],\n";
+}
+// add fake summary item if no end limit
+if ($add_extra && is_array($row)) {
+	$row['dt'] = $add_extra;
+	echo "[" . join(",", $row) . "],\n";
 }
 echo "]";
 jsonp_post();
