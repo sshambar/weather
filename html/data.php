@@ -234,7 +234,7 @@ $pdo = null;
 // print it
 jsonp_header();
 echo "/* start: $start_time end: $end_time sid: $source_id range_secs: $range_secs range: $range_mins */\n";
-echo "/* cols: ts,$cols end: $end last: $last */\n";
+echo "/* cols: ts,$cols */\n";
 jsonp_pre();
 echo "[\n";
 foreach ($rows as $row) {
