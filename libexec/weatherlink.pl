@@ -185,6 +185,11 @@ sub readBlock {
 	$value{'forecastrule'} = unpack('C*', $packet[33]);
 	$value{'rx'} = $value{'windsamples'} / $max_nof_sample_per_min * 100;
 	# a few sanity checks
+	if ($StartYear > $CurrentYear) {
+	    # generally, this tells us there's no data
+	    #say "Invalid StartYear > $CurrentYear: $StartYear";
+	    return;
+	}
 	if ($value{'tempin'} > 1500) {
 	    say "Invalid tempin > 1500: $value{'tempin'}";
 	    return;
@@ -195,10 +200,6 @@ sub readBlock {
 	}
 	if ($value{'avgwindspeed'} > 100) {
 	    say "Invalid avgwindspeed > 100: $value{'avgwindspeed'}";
-	    return;
-	}
-	if ($StartYear > $CurrentYear) {
-	    say "Invalid StartYear > $CurrentYear: $StartYear";
 	    return;
 	}
 
