@@ -10,7 +10,7 @@ var weather_range = { min: 0, max: -1 };
 var weather_range_next = null;
 
 function wdebug(msg) {
-//  console.log(msg);
+  console.log(msg);
 }
 
 function queryURL(range) {
@@ -44,19 +44,28 @@ function hideError() {
   $("#container").css('display', 'block');
 }
 
-function parseData(data) {
+function parseData(response) {
 
   var meta = { temp: [], humid: [], wind: [], hwind: [], rain: [],
 	       dayrain: [], error: null }, curdate, dayrain = 0, daystart = 0;
 
-  if (typeof(data) != "object") {
+  if (typeof(response) != "object") {
+    meta.error.msg = "Invalid weather values";
     return meta;
   }
 
-  if (data.error) {
-    meta.error = data.error;
+  error = response.error;
+  if (error) {
+    meta.error = error;
     return meta;
   }
+
+  data = response.data;
+  if (! data) {
+    meta.error.msg = "No weather data available";
+    return meta;
+  }
+
   for (i = 0; i < data.length; i++) {
     curdate = data[i][0];
     meta['temp'].push([curdate, data[i][1]]);
@@ -154,6 +163,7 @@ function setupChart(meta) {
   Highcharts.stockChart('container', {
     chart: {
       type: 'spline',
+      animation: false,
       zoomType: 'x'
     },
     plotOptions: {

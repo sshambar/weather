@@ -233,18 +233,28 @@ $pdo = null;
 
 // print it
 jsonp_header();
-echo "/* start: $start_time end: $end_time sid: $source_id range_secs: $range_secs range: $range_mins */\n";
-echo "/* cols: ts,$cols */\n";
+$response['range'] =
+	[ 'start' => $start_time,
+	  'end' => $end_time,
+	  'sid' => $source_id,
+	  'range_secs' => $range_secs,
+	  'range' => $range_mins ];
+$cols = "start_time," . $cols;
+$response['cols'] = [ 'cols' => $cols ];
+$response['data'] = array();
 jsonp_pre();
-echo "[\n";
+$prefix = json_encode($response, JSON_PRETTY_PRINT);
+echo rtrim($prefix, "]}\n") . "\n";
+$lead = "";
 foreach ($rows as $row) {
-    echo "[" . join(",", $row) . "],\n";
+	echo $lead . "[" . join(",", $row) . "]";
+	$lead = ",\n";
 }
 // add fake summary item if no end limit
 if ($add_extra && is_array($row)) {
 	$row['dt'] = $add_extra;
-	echo "[" . join(",", $row) . "],\n";
+	echo $lead . "[" . join(",", $row) . "]";
 }
-echo "]";
+echo "    ]\n}\n";
 jsonp_post();
 ?>
