@@ -35,7 +35,7 @@ GetOptions ('config|f=s' => \$config,
 pod2usage(-verbose => 2) if $man;
 
 my %options;
-my @cparams = qw(username password db db.username db.password db.source);
+my @cparams = qw(username password timezone db db.username db.password db.source);
 my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = gmtime;
 my @curtime = gmtime;
 my $CurrentYear = $curtime[5] + 1900;
@@ -114,10 +114,10 @@ if (defined($result->{'start'})) {
     $timestamp = $timestamp + (100 * $hour) + $minute;
 }
 
-if ($debug) { say "Getting URL: http://www.weatherlink.com/webdl.php?timestamp=$timestamp&user=$options{'username'}&pass=$options{'password'}&action=headers"; }
+if ($debug) { say "Getting URL: http://weatherlink.com/webdl.php?timestamp=$timestamp&user=$options{'username'}&pass=$options{'password'}&action=headers"; }
 
 my $nofRecords = 0;
-open (WL, "wget -O - \"http://www.weatherlink.com/webdl.php?timestamp=$timestamp&user=$options{'username'}&pass=$options{'password'}&action=headers\" 2> /dev/null |");
+open (WL, "wget -O - \"http://weatherlink.com/webdl.php?timestamp=$timestamp&user=$options{'username'}&pass=$options{'password'}&action=headers\" 2> /dev/null |");
 while (<WL>) {
     if (/^Records=(\d+)/) { $nofRecords = $1; }
 }
@@ -127,9 +127,9 @@ if ($debug) { say "New records: $nofRecords"; }
 
 if (! $nofRecords) { exit 0; }
 
-if ($debug) { say "Getting URL: http://www.weatherlink.com/webdl.php?timestamp=$timestamp&user=$options{'username'}&pass=$options{'password'}&action=data"; }
+if ($debug) { say "Getting URL: http://weatherlink.com/webdl.php?timestamp=$timestamp&user=$options{'username'}&pass=$options{'password'}&action=data"; }
 
-open (WL, "wget -O - \"http://www.weatherlink.com/webdl.php?timestamp=$timestamp&user=$options{'username'}&pass=$options{'password'}&action=data\" 2> /dev/null |");
+open (WL, "wget -O - \"http://weatherlink.com/webdl.php?timestamp=$timestamp&user=$options{'username'}&pass=$options{'password'}&action=data\" 2> /dev/null |");
 	
 my $file = new IO::Handle;
 $file->fdopen(fileno(WL),"r");
@@ -219,13 +219,13 @@ sub readBlock {
 		    high_temp_out, low_temp_out, humid_out, wind_samples,
 		    wind_speed, wind_dir, high_wind_speed, high_wind_dir,
 		    rain, high_rain)
-		  SELECT r.id, ?, convert_tz(?, "US/Pacific", "UTC"),
+		  SELECT r.id, ?, convert_tz(?, ?, "+00:00"),
 		    ?, ?, ?, ?, ?, ?, ?, ?, ?, w.id, ?, hw.id, ?, ?
 		  FROM weather_sources r, weather_windmap w, 
 		    weather_windmap hw
 		  WHERE r.name = ? AND w.direction = ? AND hw.direction = ?',
 		 undef,
-		 ($value{'date'}, $value{'date'},
+		 ($value{'date'}, $value{'date'}, $options{'timezone'},
 		  numfmt($value{'barometer'}/1000),
 		  numfmt($value{'tempin'}/10), numfmt($value{'humin'}),
 		  numfmt($value{'tempout'}/10),

@@ -124,9 +124,8 @@ $options = [
 	PDO::ATTR_EMULATE_PREPARES   => false,
 ];
 
-$pdo = new PDO("mysql:host=localhost;dbname=$db_name;charset=utf8",
-	       $db_user, $db_pass, $options);
-$pdo->exec("SET time_zone='UTC';");
+$pdo = new PDO($db_pdo.';charset=utf8', $db_user, $db_pass, $options);
+$pdo->exec("SET time_zone='+00:00';");
 
 if ($start == 0) {
 	$sql = "SELECT UNIX_TIMESTAMP(MIN(w.time_utc)) start
