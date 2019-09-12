@@ -9,8 +9,12 @@
  * @param end {Integer} The ending point in JS time
  */
 
+ini_set('display_errors', 0);
 //error_reporting( E_ALL );
 //ini_set('display_errors', 1);
+$prefix = '/etc/weather';
+$config = $prefix . '/webconfig.php';
+$datadir = $prefix . '/chartdata';
 
 $callback = null;
 $add_extra = 0;
@@ -67,9 +71,12 @@ if (!preg_match('/^[a-zA-Z0-9_]+$/', $callback)) {
 }
 
 $source = @$_GET['source'];
-if (!$source) $source = 'napa';
 if (!preg_match('/^[a-z]+$/', $source)) {
-	weather_error(1, "Invalid source parameter: '$source'");
+	$prefix = null;
+}
+else {
+	$prefix = $source.'_';
+	$datadir .= '/'.$source;
 }
 
 $start = @$_GET['start'];
@@ -96,27 +103,35 @@ else {
 
 $cols = @$_GET['cols'];
 if (strlen($cols)) {
-	if (!preg_match('/^[a-z_,]+$/', $cols)) {
+	if (!preg_match('/^[a-zA-Z_,]+$/', $cols)) {
 		weather_error(4, "Invalid cols parameter: '$cols'");
 	}
 }
 else {
-	$cols = "temp_out,humid_out,wind_speed,rain";
+	$cols = "outTemp,outHumidity,windSpeed,rain";
 }
 
-$valid_cols = [ 'barometer', 'temp_in', 'humid_in', 'temp_out',
-		'high_temp_out', 'low_temp_out', 'humid_out',
-		'wind_samples', 'wind_speed', 'wind_dir',
-		'high_wind_speed', 'high_wind_dir', 'rain',
-		'high_rain' ];
-$test_cols = explode(',', $cols);
-foreach ($test_cols as $col) {
+$valid_cols = [ 'barometer', 'inTemp', 'inHumidity', 'outTemp',
+		'max_outTemp', 'min_outTemp', 'outHumidity',
+		'count_windSpeed', 'windSpeed', 'windDir',
+		'windGust', 'windGustDir', 'rain',
+		'rainRate' ];
+$acols = explode(',', $cols);
+foreach ($acols as $col) {
 	if(! in_array($col, $valid_cols)) {
 		weather_error(5, "Invalid column: '$col'");
 	}
 }
+$acols = array_merge([ 'dateTime' ], $acols);
 
-require_once '/etc/weather/webconfig.php';
+if(! is_readable($config)) {
+	throw new Exception("can't read config", 5);
+}
+require_once($config);
+
+if(isset($default_prefix) && $source == $default_prefix) {
+	$prefix = null;
+}
 
 $options = [
 	PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
@@ -127,104 +142,118 @@ $options = [
 $pdo = new PDO($db_pdo.';charset=utf8', $db_user, $db_pass, $options);
 $pdo->exec("SET time_zone='+00:00';");
 
-if ($start == 0) {
-	$sql = "SELECT UNIX_TIMESTAMP(MIN(w.time_utc)) start
-		FROM weather_samples w, weather_sources s
-		WHERE s.name = :source
-		AND w.source_id = s.id";
-	$query = $pdo->prepare($sql);
-	$query->execute(['source' => $source]);
-	$result = $query->fetch();
-	$start = $result['start'];
+try {
+        $result = $pdo->query("SELECT 1 FROM ".$prefix."archive LIMIT 1");
+} catch (Exception $e) {
+	$result = false;
+}
+if($result === false) { weather_error(6, "Unknown source '$source'"); }
 
-	if (! $start) {
-		weather_error(10, "Unknown source '$source'");
-	}
+if($start == 0 || $end == 0) {
+	$sql = "SELECT MIN(dateTime) first, MAX(dateTime) last
+		FROM ".$prefix."archive";
+	$query = $pdo->prepare($sql);
+	$query->execute();
+	$result = $query->fetch();
+	if($result === false) { weather_error(7, "No data found"); }
+	$first = (int)$result['first'];
+	$last = (int)$result['last'];
+	if($start < $first) { $start = $first; }
+	if($end == 0 || $end > $last) { $end = $last; }
+	if($end < $start) { weather_error(8, "No data found"); }
 }
 
-if ($end == 0) {
-	$sql = "SELECT UNIX_TIMESTAMP(MAX(w.time_utc)) end
-		FROM weather_samples w, weather_sources s
-		WHERE s.name = :source
-		AND w.source_id = s.id";
-	$query = $pdo->prepare($sql);
-	$query->execute(['source' => $source]);
-	$result = $query->fetch();
-	$end = $result['end'];
+function loadCSV($datadir, $file, $acols, $start, $end) {
 
-	if (! $end) {
-		weather_error(10, "Unknown source '$source'");
+	$path = $datadir.'/'.$file.'.csv';
+	if(! is_readable($path)) { return []; }
+	$fn = fopen($path, "r");
+	if($fn === false) { return []; }
+	$rows = [];
+	$fcols = false;
+	while(! feof($fn)) {
+		if($fcols === false) {
+			$fcols = fgets($fn);
+			if($fcols === false) {
+				weather_error(9, "No columns in source file");
+			}
+			$afcols = preg_split("/#[ ]*/", $fcols);
+			if(count($afcols) < 2) { return []; }
+			$colmap = explode(",", $afcols[1]);
+			foreach($acols as $col) {
+				$key = array_search($col, $colmap);
+				if($key === false) {
+					weather_error(10, "Unsupported column: '$col'");
+				}
+				$mapping[] = $key;
+			}
+		}
+		else {
+			// map values into rows
+			$csv = fgetcsv($fn);
+			if($csv !== false) {
+				$row = [];
+				foreach($mapping as $key) {
+					if($key == 0) {
+						$row[] = $csv[$key] * 1000;
+					}
+					else {
+						$row[] = $csv[$key];
+					}
+				}
+				$rows["$row[0]"] = $row;
+			}
+		}
 	}
+	fclose($fn);
+	return $rows;
 }
 
-// set some utility variables
 $range_secs = $end - $start;
-
-$sql = "SELECT MAX(r.range_mins) range_mins, s.id source_id
-	FROM weather_ranges r, weather_sources s
-	WHERE :range_secs >= r.min_query_secs
-	AND s.name = :source
-	GROUP by s.id";
-
-$query = $pdo->prepare($sql);
-$query->execute(['range_secs' => $range_secs,
-		 'source' => $source]);
-$result = $query->fetch();
-
-$range_mins = $result['range_mins'];
-$source_id = $result['source_id'];
-
-if (! $source_id) {
-	weather_error(11, "Unknown source '$source'");
-}
-
-// move start backwards to include first part of range...
-$start -= $range_mins * 60;
-$start_time = gmstrftime('%Y-%m-%d %H:%M:%S', $start);
-$end_time = gmstrftime('%Y-%m-%d %H:%M:%S', $end);
-
-$query_args = ['start_time' => $start_time,
-	       'end_time' => $end_time,
-	       'source_id' => $source_id];
-
-if ($range_mins > 30) {
-	$table = "weather_summary";
-	$match = "AND range_mins = :range_mins";
-	$query_args['range_mins'] = $range_mins;
-
-	$sql = "SELECT UNIX_TIMESTAMP(MAX(time_utc)) last
-		FROM weather_summary
-		WHERE source_id = :source_id
-		AND range_mins = :range_mins";
-	$query = $pdo->prepare($sql);
-	$query->execute(['source_id' => $source_id,
-			 'range_mins' => $range_mins]);
-	$result = $query->fetch();
-	$last = $result['last'];
-
-	if ($end > $last) {
-		$add_extra = $end * 1000;
+if($range_secs > 5184000) { // > 60 days, use daily
+	if($range_secs > 157680000) { // > 5 years, use weekly
+		$range_mins = 10080;
+		$trailer = '-weekly';
+	}
+	else {
+		$range_mins = 1440;
+		$trailer = '-daily';
+	}
+	// move start backwards to include first part of range...
+	$start -= $range_mins * 60;
+	// File-pattern is YYYY-daily.csv
+	$startYear = (int)gmstrftime('%Y', $start);
+	$endYear = (int)gmstrftime('%Y', $end);
+	$rows = [];
+	foreach(range($startYear, $endYear) as $year) {
+		$rows = array_merge($rows, loadCSV($datadir, $year.$trailer,
+						   $acols, $start, $end));
+	}
+	if(count($rows) > 0) {
+		$last = end($rows)[0] / 1000;
+		if ($end > $last) {
+			$add_extra = $end * 1000;
+		}
 	}
 }
 else {
-	$table = "weather_samples";
-	$match = "";
-}
-
-$sql = "SELECT UNIX_TIMESTAMP(time_utc) * 1000 dt,
+	$range_mins = 30;
+	$sql = "SELECT dateTime * 1000 dt,
 		$cols
-	FROM $table
-	WHERE time_utc BETWEEN :start_time AND :end_time
-        AND source_id = :source_id $match
-	ORDER BY time_utc
+	FROM ".$prefix."archive
+	WHERE dateTime BETWEEN :start_time AND :end_time
+	ORDER BY dateTime
 	LIMIT 0, 5000";
 
-$query = $pdo->prepare($sql);
-$query->execute($query_args);
-$rows = $query->fetchAll();
-
-$query = null;
+	$query = $pdo->prepare($sql);
+	$query->execute(['start_time' => $start,
+			 'end_time' => $end]);
+	$rows = $query->fetchAll();
+	$query = null;
+}
 $pdo = null;
+
+if(count($rows) == 0) { weather_error(11, "No data found"); }
 
 //header('Content-Type: text/html');
 //var_dump($rows);
@@ -233,13 +262,11 @@ $pdo = null;
 // print it
 jsonp_header();
 $response['range'] =
-	[ 'start' => $start_time,
-	  'end' => $end_time,
-	  'sid' => $source_id,
+	[ 'start' => gmstrftime('%Y-%m-%d %H:%M:%S', $start),
+	  'end' => gmstrftime('%Y-%m-%d %H:%M:%S', $end),
 	  'range_secs' => $range_secs,
 	  'range' => $range_mins ];
-$cols = "start_time," . $cols;
-$response['cols'] = [ 'cols' => $cols ];
+$response['cols'] = [ 'cols' => "dateTime,".$cols ];
 $response['data'] = array();
 jsonp_pre();
 $prefix = json_encode($response, JSON_PRETTY_PRINT);

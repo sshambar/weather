@@ -2,8 +2,8 @@
  Chart setup for weather
 */
 
-var weather_source = '';
-var weather_cols = 'outTemp,outHumidity,windGust,windSpeed,rain';
+var weather_source = 'none';
+var weather_cols = 'temp_out,humid_out,high_wind_speed,wind_speed,rain';
 var weather_query = null;
 var weather_updating = null;
 var weather_range = { min: 0, max: -1 };
