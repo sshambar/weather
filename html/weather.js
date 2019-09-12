@@ -120,12 +120,19 @@ function weatherStartQuery(range) {
       wdebug("query complete: " + meta['temp'].length);
       weather_updating = meta;
       hideError();
+      wdebug("setData[temp]");
       chart.series[0].setData(meta['temp'], false);
+      wdebug("setData[humid]");
       chart.series[1].setData(meta['humid'], false);
+      wdebug("setData[hwind]");
       chart.series[2].setData(meta['hwind'], false);
+      wdebug("setData[wind]");
       chart.series[3].setData(meta['wind'], false);
+      wdebug("setData[dayrain]");
       chart.series[4].setData(meta['dayrain'], false);
+      wdebug("setData[rain]");
       chart.series[5].setData(meta['rain'], false);
+      wdebug("redraw");
       chart.redraw();
       weather_updating = null;
     }
@@ -169,10 +176,10 @@ function setupChart(meta) {
     },
     plotOptions: {
       series: {
-	getExtremesFromAll: true,
 	showInNavigator: true,
-	lineWidth: 1.5
-      }
+	lineWidth: 1.5,
+	gapSize: 10
+      },
     },
     navigator: {
       adaptToUpdatedData: false
