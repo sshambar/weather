@@ -12,9 +12,7 @@
 ini_set('display_errors', 0);
 //error_reporting( E_ALL );
 //ini_set('display_errors', 1);
-$prefix = '/etc/weather';
-$config = $prefix . '/webconfig.php';
-$datadir = $prefix . '/chartdata';
+$config = '/etc/weather/webconfig.php';
 
 $callback = null;
 $add_extra = 0;
@@ -49,6 +47,11 @@ function ajaxExceptionHandler($e) {
 }
 set_exception_handler('ajaxExceptionHandler');
 
+if(! is_readable($config)) {
+	throw new Exception("can't read config", 5);
+}
+require_once($config);
+
 /* on client:
 $(document).ajaxSuccess(function(evt, request, settings){
     var data=request.responseText;
@@ -72,10 +75,10 @@ if (!preg_match('/^[a-zA-Z0-9_]+$/', $callback)) {
 
 $source = @$_GET['source'];
 if (!preg_match('/^[a-z]+$/', $source)) {
-	$prefix = null;
+	$dbprefix = null;
 }
 else {
-	$prefix = $source.'_';
+	$dbprefix = $source.'_';
 	$datadir .= '/'.$source;
 }
 
@@ -124,13 +127,8 @@ foreach ($acols as $col) {
 }
 $acols = array_merge([ 'dateTime' ], $acols);
 
-if(! is_readable($config)) {
-	throw new Exception("can't read config", 5);
-}
-require_once($config);
-
-if(isset($default_prefix) && $source == $default_prefix) {
-	$prefix = null;
+if(isset($default_source) && $source == $default_source) {
+	$dbprefix = null;
 }
 
 $options = [
@@ -143,7 +141,7 @@ $pdo = new PDO($db_pdo.';charset=utf8', $db_user, $db_pass, $options);
 $pdo->exec("SET time_zone='+00:00';");
 
 try {
-        $result = $pdo->query("SELECT 1 FROM ".$prefix."archive LIMIT 1");
+        $result = $pdo->query("SELECT 1 FROM ".$dbprefix."archive LIMIT 1");
 } catch (Exception $e) {
 	$result = false;
 }
@@ -151,7 +149,7 @@ if($result === false) { weather_error(6, "Unknown source '$source'"); }
 
 if($start == 0 || $end == 0) {
 	$sql = "SELECT MIN(dateTime) first, MAX(dateTime) last
-		FROM ".$prefix."archive";
+		FROM ".$dbprefix."archive";
 	$query = $pdo->prepare($sql);
 	$query->execute();
 	$result = $query->fetch();
@@ -240,7 +238,7 @@ else {
 	$range_mins = 30;
 	$sql = "SELECT dateTime * 1000 dt,
 		$cols
-	FROM ".$prefix."archive
+	FROM ".$dbprefix."archive
 	WHERE dateTime BETWEEN :start_time AND :end_time
 	ORDER BY dateTime
 	LIMIT 0, 5000";
@@ -269,8 +267,8 @@ $response['range'] =
 $response['cols'] = [ 'cols' => "dateTime,".$cols ];
 $response['data'] = array();
 jsonp_pre();
-$prefix = json_encode($response, JSON_PRETTY_PRINT);
-echo rtrim($prefix, "]}\n") . "\n";
+$rprefix = json_encode($response, JSON_PRETTY_PRINT);
+echo rtrim($rprefix, "]}\n") . "\n";
 $lead = "";
 foreach ($rows as $row) {
 	echo $lead . "[" . join(",", $row) . "]";

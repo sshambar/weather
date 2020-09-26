@@ -5,13 +5,13 @@ if(! is_readable($config)) {
 	throw new Exception("Unable to read config");
 }
 require_once($config);
-$source = $default_prefix;
+$source = $default_source;
 if(isset($_SERVER['REDIRECT_ORIGINAL_PATH'])) {
     $source = preg_replace('|/([a-z]+)[^a-z]?.*|', '$1',
                            $_SERVER['REDIRECT_ORIGINAL_PATH'], 1);
 }
-if(isset($prefix_map) && isset($prefix_map[$source])) {
-    $map = $prefix_map[$source];
+if(isset($source_map) && isset($source_map[$source])) {
+    $map = $source_map[$source];
     if(isset($map['title'])) { $title = $map['title']; }
     if(isset($map['source'])) { $source = $map['source']; }
 }
