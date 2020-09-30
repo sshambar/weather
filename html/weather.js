@@ -8,6 +8,7 @@ var weather_query = null;
 var weather_updating = null;
 var weather_range = { min: 0, max: -1 };
 var weather_range_next = null;
+var weather_options = {};
 
 function wdebug(msg) {
   console.log(msg);
@@ -24,6 +25,7 @@ function queryURL(range) {
   }
 
   weather_query = url;
+  wdebug("query: " + url);
 
   return url;
 }
@@ -85,7 +87,7 @@ function parseData(response) {
     }
     meta['dayrain'].push([curdate, dayrain]);
   }
-  
+
   return meta;
 }
 
@@ -120,17 +122,17 @@ function weatherStartQuery(range) {
       wdebug("query complete: " + meta['temp'].length);
       weather_updating = meta;
       hideError();
-      wdebug("setData[temp]");
+      //wdebug("setData[temp]");
       chart.series[0].setData(meta['temp'], false);
-      wdebug("setData[humid]");
+      //wdebug("setData[humid]");
       chart.series[1].setData(meta['humid'], false);
-      wdebug("setData[hwind]");
+      //wdebug("setData[hwind]");
       chart.series[2].setData(meta['hwind'], false);
-      wdebug("setData[wind]");
+      //wdebug("setData[wind]");
       chart.series[3].setData(meta['wind'], false);
-      wdebug("setData[dayrain]");
+      //wdebug("setData[dayrain]");
       chart.series[4].setData(meta['dayrain'], false);
-      wdebug("setData[rain]");
+      //wdebug("setData[rain]");
       chart.series[5].setData(meta['rain'], false);
       wdebug("redraw");
       chart.redraw();
@@ -168,7 +170,7 @@ function setupChart(meta) {
       useUTC:  false
     }
   });
-  Highcharts.stockChart('container', {
+  weather_options = {
     chart: {
       type: 'spline',
       animation: false,
@@ -182,9 +184,14 @@ function setupChart(meta) {
       },
     },
     navigator: {
+      margin: 40,
       adaptToUpdatedData: false
     },
     rangeSelector: {
+      verticalAlign: 'bottom',
+      floating: true,
+      x: 20,
+      y: -60,
       buttons: [{
 	type: 'hour',
 	count: 31,
@@ -209,14 +216,19 @@ function setupChart(meta) {
     },
     legend : {
       enabled: true,
-      x: -70,
+      x: -40,
+      y: -60,
       align: 'right',
-      verticalAlign: 'top',
+      verticalAlign: 'bottom',
       floating: true
     },
     xAxis: {
       events: { afterSetExtremes: afterSetExtremes },
       minRange: 30 * 3600 * 1000 // one day
+    },
+    tooltip: {
+        xDateFormat: '%b %d, %Y',
+        shared: true
     },
     yAxis: [{
       labels: {
@@ -255,7 +267,7 @@ function setupChart(meta) {
       },
       top: '70%',
       height: '30%',
-      max: 10,
+      max: 5,
       min: 0,
       offset: 0,
       lineWidth: 2
@@ -329,7 +341,8 @@ function setupChart(meta) {
       },
       colorIndex: 4
     }]
-  });
+  };
+  Highcharts.stockChart('container', weather_options);
 }
 
 function weatherSetup(source) {

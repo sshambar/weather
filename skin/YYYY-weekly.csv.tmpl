@@ -1,8 +1,19 @@
 #errorCatcher Echo
 #set $Float="%.2f"
+#import math
 \# dateTime,barometer,inTemp,inHumidity,outTemp,max_outTemp,min_outTemp,outHumidity,count_windSpeed,windSpeed,windDir,windGust,windGustDir,rain,rainRate
 #for $week in $year.spans($interval=604800)
 #if $week.barometer.count.raw
-$week.dateTime.format("%s"),$week.barometer.avg.format($Float,'',False),$week.inTemp.avg.format($Float,'',False),$week.inHumidity.avg.format($Float,'',False),$week.outTemp.avg.format($Float,'',False),$week.outTemp.max.raw,$week.outTemp.min.raw,$week.outHumidity.avg.format($Float,'',False),$week.windSpeed.count.raw,$week.wind.vecavg.format($Float,'',False),$week.wind.vecdir.format($Float,'',False),$week.wind.max.raw,$week.wind.gustdir.raw,$week.rain.sum.raw,$week.rainRate.sum.raw
+#set $rain=0.0
+#set $rain_rate=0.0
+#for $day in $week.spans($interval=86400)
+#if $day.rain.sum.raw is not None and $day.rain.sum.raw > $rain
+#set $rain=math.trunc($day.rain.sum.raw*100)/100
+#end if
+#if $day.rainRate.max.raw is not None and $day.rainRate.max.raw > $rain_rate
+#set $rain_rate=math.trunc($day.rainRate.max.raw*100)/100
+#end if
+#end for
+$week.dateTime.format("%s"),$week.barometer.avg.format($Float,'',False),$week.inTemp.avg.format($Float,'',False),$week.inHumidity.avg.format($Float,'',False),$week.outTemp.avg.format($Float,'',False),$week.outTemp.max.raw,$week.outTemp.min.raw,$week.outHumidity.avg.format($Float,'',False),$week.windSpeed.count.raw,$week.wind.vecavg.format($Float,'',False),$week.wind.vecdir.format($Float,'',False),$week.wind.max.raw,$week.wind.gustdir.raw,$rain,$rain_rate
 #end if
 #end for

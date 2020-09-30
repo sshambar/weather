@@ -3,6 +3,6 @@
 \# dateTime,barometer,inTemp,inHumidity,outTemp,max_outTemp,min_outTemp,outHumidity,count_windSpeed,windSpeed,windDir,windGust,windGustDir,rain,rainRate
 #for $day in $year.spans($interval=86400)
 #if $day.barometer.count.raw
-$day.dateTime.format("%s"),$day.barometer.avg.format($Float,'',False),$day.inTemp.avg.format($Float,'',False),$day.inHumidity.avg.format($Float,'',False),$day.outTemp.avg.format($Float,'',False),$day.outTemp.max.raw,$day.outTemp.min.raw,$day.outHumidity.avg.format($Float,'',False),$day.windSpeed.count.raw,$day.wind.vecavg.format($Float,'',False),$day.wind.vecdir.format($Float,'',False),$day.wind.max.raw,$day.wind.gustdir.raw,$day.rain.sum.raw,$day.rainRate.sum.raw
+$day.dateTime.format("%s"),$day.barometer.avg.format($Float,'',False),$day.inTemp.avg.format($Float,'',False),$day.inHumidity.avg.format($Float,'',False),$day.outTemp.avg.format($Float,'',False),$day.outTemp.max.raw,$day.outTemp.min.raw,$day.outHumidity.avg.format($Float,'',False),$day.windSpeed.count.raw,$day.wind.vecavg.format($Float,'',False),$day.wind.vecdir.format($Float,'',False),$day.wind.max.raw,$day.wind.gustdir.raw,$day.rain.sum.format($Float,'',False),$day.rainRate.max.format($Float,'',False)
 #end if
 #end for

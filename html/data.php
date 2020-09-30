@@ -276,9 +276,9 @@ foreach ($rows as $row) {
 }
 // add fake summary item if no end limit
 if ($add_extra && is_array($row)) {
-	$row['dt'] = $add_extra;
+	$row[0] = $add_extra;
 	echo $lead . "[" . join(",", $row) . "]";
 }
-echo "    ]\n}\n";
+echo "\n    ]\n}\n";
 jsonp_post();
 ?>
