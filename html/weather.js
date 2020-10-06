@@ -3,7 +3,7 @@
 */
 
 var weather_source = '';
-var weather_cols = 'outTemp,outHumidity,windGust,windSpeed,rain';
+var weather_cols = 'min_outTemp,max_outTemp,outHumidity,windGust,windSpeed,rain';
 var weather_query = null;
 var weather_updating = null;
 var weather_range = { min: 0, max: -1 };
@@ -46,7 +46,7 @@ function hideError() {
   $("#container").css('display', 'block');
 }
 
-function parseData(response) {
+function parseResponse(response) {
 
   var meta = { temp: [], humid: [], wind: [], hwind: [], rain: [],
 	       dayrain: [], error: null }, curdate, dayrain = 0, daystart = 0;
@@ -62,6 +62,7 @@ function parseData(response) {
     return meta;
   }
 
+  meta.mode = response.mode;
   data = response.data;
   if (! data) {
     meta.error.msg = "No weather data available";
@@ -70,19 +71,24 @@ function parseData(response) {
 
   for (i = 0; i < data.length; i++) {
     curdate = data[i][0];
-    meta['temp'].push([curdate, data[i][1]]);
-    meta['humid'].push([curdate, data[i][2]]);
-    meta['hwind'].push([curdate, data[i][3]]);
-    meta['wind'].push([curdate, data[i][4]]);
-    meta['rain'].push([curdate, data[i][5]]);
-    dayrain += data[i][5];
+    if (meta.mode == "summary") {
+      meta['temp'].push([curdate, data[i][1], data[i][2]]);
+    }
+    else {
+      meta['temp'].push([curdate, data[i][1]]);
+    }      
+    meta['humid'].push([curdate, data[i][3]]);
+    meta['hwind'].push([curdate, data[i][4]]);
+    meta['wind'].push([curdate, data[i][5]]);
+    meta['rain'].push([curdate, data[i][6]]);
+    dayrain += data[i][6];
     if (curdate > (data[daystart][0] + 86400000)) {
-      dayrain -= data[daystart][5];
+      dayrain -= data[daystart][6];
       while(++daystart < i) {
 	if (curdate <= (data[daystart][0] + 86400000)) {
 	  break;
 	}
-	dayrain -= data[daystart][5];
+	dayrain -= data[daystart][6];
       }
     }
     meta['dayrain'].push([curdate, dayrain]);
@@ -112,8 +118,8 @@ function weatherStartQuery(range) {
   wdebug("starting query: " + range.min + " - " + range.max);
   chart.showLoading('Loading data from server...');
 
-  $.getJSON(queryURL(range), function (data) {
-    var meta = parseData(data);
+  $.getJSON(queryURL(range), function (response) {
+    var meta = parseResponse(response);
     chart.hideLoading();
     if (meta.error) {
       showError(meta.error.msg);
@@ -123,16 +129,32 @@ function weatherStartQuery(range) {
       weather_updating = meta;
       hideError();
       //wdebug("setData[temp]");
-      chart.series[0].setData(meta['temp'], false);
+      if (meta.mode == "summary") {
+	chart.series[6].hide();
+	chart.series[6].setData(null, false);
+	chart.series[0].setData(meta['temp'], false);
+	chart.series[0].show();
+      }
+      else {
+	chart.series[0].hide();
+	chart.series[0].setData(null, false);
+	chart.series[6].setData(meta['temp'], false);
+	chart.series[6].show();
+      }
       //wdebug("setData[humid]");
+      chart.series[1].setData(null, false);
       chart.series[1].setData(meta['humid'], false);
       //wdebug("setData[hwind]");
+      chart.series[2].setData(null, false);
       chart.series[2].setData(meta['hwind'], false);
       //wdebug("setData[wind]");
+      chart.series[3].setData(null, false);
       chart.series[3].setData(meta['wind'], false);
       //wdebug("setData[dayrain]");
+      chart.series[4].setData(null, false);
       chart.series[4].setData(meta['dayrain'], false);
       //wdebug("setData[rain]");
+      chart.series[5].setData(null, false);
       chart.series[5].setData(meta['rain'], false);
       wdebug("redraw");
       chart.redraw();
@@ -239,9 +261,10 @@ function setupChart(meta) {
 	text: 'F/%'
       },
       height: '40%',
-      max: 100,
       min: 0,
       startOnTick: false,
+      max: 120,
+      endOnTick: false,
       lineWidth: 2
     }, {
       labels: {
@@ -273,6 +296,7 @@ function setupChart(meta) {
       lineWidth: 2
     }],
     series: [{
+      type: 'arearange',
       data: meta['temp'],
       name: 'Temperature',
       tooltip: {
@@ -340,6 +364,14 @@ function setupChart(meta) {
 	valueSuffix: ' in'
       },
       colorIndex: 4
+    }, {
+      name: 'Temperature',
+      visible: false,
+      tooltip: {
+	valueDecimals: 2,
+	valueSuffix: 'F'
+      },
+      colorIndex: 5
     }]
   };
   Highcharts.stockChart('container', weather_options);
@@ -349,8 +381,8 @@ function weatherSetup(source) {
 
   weather_source = source;
 
-  $.getJSON(queryURL(), function (data) {
-    var meta = parseData(data);
+  $.getJSON(queryURL(), function (response) {
+    var meta = parseResponse(response);
     if (meta.error) {
       showError(meta.error.msg);
     }

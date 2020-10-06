@@ -116,9 +116,8 @@ else {
 
 $valid_cols = [ 'barometer', 'inTemp', 'inHumidity', 'outTemp',
 		'max_outTemp', 'min_outTemp', 'outHumidity',
-		'count_windSpeed', 'windSpeed', 'windDir',
-		'windGust', 'windGustDir', 'rain',
-		'rainRate' ];
+		'windSpeed', 'windDir',	'windGust', 'windGustDir',
+		'rain',	'rainRate' ];
 $acols = explode(',', $cols);
 foreach ($acols as $col) {
 	if(! in_array($col, $valid_cols)) {
@@ -209,6 +208,7 @@ function loadCSV($datadir, $file, $acols, $start, $end) {
 
 $range_secs = $end - $start;
 if($range_secs > 5184000) { // > 60 days, use daily
+	$mode = 'summary';
 	if($range_secs > 157680000) { // > 5 years, use weekly
 		$range_mins = 10080;
 		$trailer = '-weekly';
@@ -235,9 +235,18 @@ if($range_secs > 5184000) { // > 60 days, use daily
 	}
 }
 else {
+	$mode = 'direct';
+	$acols = explode(',', $cols);
+	foreach(array_keys($acols) as $i) {
+		if($acols[$i] == 'min_outTemp' ||
+		   $acols[$i] == 'max_outTemp') {
+			$acols[$i] = 'outTemp '.$acols[$i];
+		}
+	}
+	$scols = implode(',', $acols);
 	$range_mins = 30;
 	$sql = "SELECT dateTime * 1000 dt,
-		$cols
+		$scols
 	FROM ".$dbprefix."archive
 	WHERE dateTime BETWEEN :start_time AND :end_time
 	ORDER BY dateTime
@@ -264,6 +273,7 @@ $response['range'] =
 	  'end' => gmstrftime('%Y-%m-%d %H:%M:%S', $end),
 	  'range_secs' => $range_secs,
 	  'range' => $range_mins ];
+$response['mode'] = $mode;
 $response['cols'] = [ 'cols' => "dateTime,".$cols ];
 $response['data'] = array();
 jsonp_pre();
