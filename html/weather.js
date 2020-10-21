@@ -202,7 +202,10 @@ function setupChart(meta) {
       series: {
 	showInNavigator: true,
 	lineWidth: 1.5,
-	gapSize: 10
+	dataGrouping: {
+	  enabled: false,
+	},
+	gapSize: 7,
       },
     },
     navigator: {
@@ -245,6 +248,7 @@ function setupChart(meta) {
       floating: true
     },
     xAxis: {
+      ordinal: false,
       events: { afterSetExtremes: afterSetExtremes },
       minRange: 30 * 3600 * 1000 // one day
     },
