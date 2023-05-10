@@ -1,5 +1,5 @@
 /*
- Chart setup for weather
+ Chart setup for weather v1.0
 */
 
 var weather_source = '';
@@ -132,30 +132,25 @@ function weatherStartQuery(range) {
       if (meta.mode == "summary") {
 	chart.series[6].hide();
 	chart.series[6].setData(null, false);
-	chart.series[0].setData(meta['temp'], false);
+	chart.series[0].setData(meta['temp'], false, false, false);
 	chart.series[0].show();
       }
       else {
 	chart.series[0].hide();
 	chart.series[0].setData(null, false);
-	chart.series[6].setData(meta['temp'], false);
+	chart.series[6].setData(meta['temp'], false, false, false);
 	chart.series[6].show();
       }
       //wdebug("setData[humid]");
-      chart.series[1].setData(null, false);
-      chart.series[1].setData(meta['humid'], false);
+      chart.series[1].setData(meta['humid'], false, false, false);
       //wdebug("setData[hwind]");
-      chart.series[2].setData(null, false);
-      chart.series[2].setData(meta['hwind'], false);
+      chart.series[2].setData(meta['hwind'], false, false, false);
       //wdebug("setData[wind]");
-      chart.series[3].setData(null, false);
-      chart.series[3].setData(meta['wind'], false);
+      chart.series[3].setData(meta['wind'], false, false, false);
       //wdebug("setData[dayrain]");
-      chart.series[4].setData(null, false);
-      chart.series[4].setData(meta['dayrain'], false);
+      chart.series[4].setData(meta['dayrain'], false, false, false);
       //wdebug("setData[rain]");
-      chart.series[5].setData(null, false);
-      chart.series[5].setData(meta['rain'], false);
+      chart.series[5].setData(meta['rain'], false, false, false);
       wdebug("redraw");
       chart.redraw();
       weather_updating = null;
@@ -330,7 +325,7 @@ function setupChart(meta) {
 	linearGradient: { x1: 0, y1: 0, x2: 0, y2: 1 },
 	stops: [
 	  [0, Highcharts.getOptions().colors[2]],
-	  [1, Highcharts.Color(Highcharts.getOptions().colors[2]).setOpacity(0).get('rgba')]
+	  [1, new Highcharts.Color(Highcharts.getOptions().colors[2]).setOpacity(0).get('rgba')]
 	]
       }
     }, {
@@ -356,7 +351,7 @@ function setupChart(meta) {
 	linearGradient: { x1: 0, y1: 0, x2: 0, y2: 1 },
 	stops: [
 	  [0, Highcharts.getOptions().colors[0]],
-	  [1, Highcharts.Color(Highcharts.getOptions().colors[0]).setOpacity(0).get('rgba')]
+	  [1, new Highcharts.Color(Highcharts.getOptions().colors[0]).setOpacity(0).get('rgba')]
 	]
       }
     }, {

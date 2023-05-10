@@ -24,7 +24,7 @@ if(isset($source_map) && isset($source_map[$source])) {
 
 <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
 <script src="https://code.highcharts.com/stock/highstock.js"></script>
-<script src="https://code.highcharts.com/highcharts-more.js"></script>
+<script src="https://code.highcharts.com/stock/highcharts-more.js"></script>
 <script src="<?php echo $_SERVER['CONTEXT_PREFIX']; ?>/weather.js"></script>
 <script type="text/javascript">
  $(function() {
